@@ -26,7 +26,9 @@ The bridge exposes a small HTTP API:
 
 ```text
 GET  /              Service info and endpoint list
+GET  /ui            Lightweight local web panel
 GET  /health        Health check
+GET  /api/status    Bridge, login, and Codex CLI status
 POST /codex/exec    Runs Codex CLI non-interactively
 ```
 
@@ -68,6 +70,22 @@ Expected `/` response:
 }
 ```
 
+Web panel:
+
+```text
+http://localhost:8787/ui
+```
+
+The panel can:
+
+```text
+show bridge and Codex login status
+start Codex device login
+logout Codex from the container volume
+run a test codex exec prompt
+temporarily update Codex CLI inside the running container
+```
+
 ## Login
 
 Codex auth is stored in the Docker volume `codex-n8n-bridge`.
@@ -88,6 +106,24 @@ Expected:
 
 ```text
 Logged in using ChatGPT
+```
+
+## Updating Codex CLI
+
+The `/ui` panel has an `Update Codex CLI` button. It runs:
+
+```text
+npm install -g @openai/codex@latest
+```
+
+inside the currently running container.
+
+This is useful for testing, but it is not the durable release path. If the container is recreated from the image, the image's bundled Codex version is used again. For a persistent update, rebuild and push the Docker image:
+
+```powershell
+docker build -t codex-n8n-bridge:local -t ghcr.io/stanshchukin/codex-n8n-bridge:latest .
+docker push ghcr.io/stanshchukin/codex-n8n-bridge:latest
+docker compose -f .\docker-compose.container.yml up -d --force-recreate
 ```
 
 ## n8n HTTP Request Node

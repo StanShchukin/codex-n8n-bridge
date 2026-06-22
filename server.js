@@ -1,6 +1,7 @@
 const http = require("http");
 const { spawn } = require("child_process");
 const path = require("path");
+const { URL } = require("url");
 
 const PORT = Number(process.env.CODEX_BRIDGE_PORT || 8787);
 const HOST = process.env.CODEX_BRIDGE_HOST || "0.0.0.0";
@@ -10,6 +11,17 @@ const CODEX_BIN = process.env.CODEX_BIN || "codex";
 const DISABLE_MCP = process.env.CODEX_BRIDGE_DISABLE_MCP === "1";
 const MAX_PROMPT_CHARS = Number(process.env.CODEX_BRIDGE_MAX_PROMPT_CHARS || 12000);
 const DEFAULT_TIMEOUT_MS = Number(process.env.CODEX_BRIDGE_TIMEOUT_MS || 10 * 60 * 1000);
+const COMMAND_TIMEOUT_MS = Number(process.env.CODEX_BRIDGE_COMMAND_TIMEOUT_MS || 30 * 1000);
+
+let loginProcess = null;
+let loginState = {
+  running: false,
+  exitCode: null,
+  stdout: "",
+  stderr: "",
+  startedAt: null,
+  finishedAt: null,
+};
 
 if (!TOKEN) {
   console.error("Missing CODEX_BRIDGE_TOKEN. Set it before starting the bridge.");
@@ -23,6 +35,265 @@ function sendJson(res, status, payload) {
     "content-length": Buffer.byteLength(body),
   });
   res.end(body);
+}
+
+function sendHtml(res, status, body) {
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+function hasValidToken(req) {
+  return req.headers["x-codex-bridge-token"] === TOKEN;
+}
+
+function requireToken(req, res) {
+  if (!hasValidToken(req)) {
+    sendJson(res, 401, { ok: false, error: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function runCommand(args, { timeoutMs = COMMAND_TIMEOUT_MS } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(CODEX_BIN, args, {
+      cwd: path.resolve(DEFAULT_CWD),
+      windowsHide: true,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      stderr += `\nTimed out after ${timeoutMs} ms`;
+    }, timeoutMs);
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ ok: false, exitCode: null, stdout, stderr: String(error) });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0, exitCode: code, stdout, stderr });
+    });
+  });
+}
+
+function runProgram(command, args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd: path.resolve(DEFAULT_CWD),
+      windowsHide: true,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      stderr += `\nTimed out after ${timeoutMs} ms`;
+    }, timeoutMs);
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ ok: false, exitCode: null, stdout, stderr: String(error) });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0, exitCode: code, stdout, stderr });
+    });
+  });
+}
+
+function renderUi() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codex n8n Bridge</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, Segoe UI, Arial, sans-serif; background: #111; color: #eee; }
+    body { margin: 0; padding: 24px; }
+    main { max-width: 1040px; margin: 0 auto; display: grid; gap: 16px; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    h1 { margin: 0; font-size: 24px; }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    section { border: 1px solid #333; border-radius: 8px; padding: 16px; background: #181818; }
+    label { display: block; margin: 10px 0 6px; color: #bbb; font-size: 13px; }
+    input, textarea, select { box-sizing: border-box; width: 100%; border: 1px solid #3a3a3a; border-radius: 6px; background: #101010; color: #f4f4f4; padding: 10px; font: inherit; }
+    textarea { min-height: 108px; resize: vertical; }
+    button { border: 1px solid #555; border-radius: 6px; background: #242424; color: #fff; padding: 9px 12px; cursor: pointer; }
+    button:hover { background: #303030; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .pill { display: inline-flex; align-items: center; border: 1px solid #444; border-radius: 999px; padding: 4px 9px; font-size: 12px; color: #ddd; }
+    pre { overflow: auto; background: #0b0b0b; border: 1px solid #2b2b2b; border-radius: 6px; padding: 12px; white-space: pre-wrap; word-break: break-word; }
+    .muted { color: #aaa; }
+    @media (max-width: 760px) { body { padding: 14px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Codex n8n Bridge</h1>
+      <span class="pill">localhost:8787</span>
+    </header>
+
+    <section>
+      <h2>Access</h2>
+      <label for="token">Bridge token</label>
+      <input id="token" type="password" placeholder="X-Codex-Bridge-Token" />
+      <div class="row" style="margin-top: 10px;">
+        <button onclick="saveToken()">Save token</button>
+        <button onclick="loadStatus()">Refresh status</button>
+        <button onclick="logout()">Logout Codex</button>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section>
+        <h2>Status</h2>
+        <pre id="status">Not loaded.</pre>
+      </section>
+
+      <section>
+        <h2>Login</h2>
+        <p class="muted">Starts <code>codex login --device-auth</code> inside the container. Copy the device code from output, open the shown URL, and finish login.</p>
+        <div class="row">
+          <button onclick="startLogin()">Start login</button>
+          <button onclick="loadLoginStatus()">Refresh login output</button>
+          <button onclick="cancelLogin()">Cancel login</button>
+        </div>
+        <pre id="login">No login process started.</pre>
+      </section>
+    </div>
+
+    <section>
+      <h2>Codex CLI Update</h2>
+      <p class="muted">This updates Codex CLI inside the currently running container. It is useful for testing, but a container recreate from the published image can revert it. For a persistent update, rebuild and push the Docker image.</p>
+      <div class="row">
+        <button onclick="updateCodex()">Update Codex CLI</button>
+      </div>
+      <pre id="update">No update run yet.</pre>
+    </section>
+
+    <section>
+      <h2>Test Codex Exec</h2>
+      <label for="prompt">Prompt</label>
+      <textarea id="prompt">Say OK only.</textarea>
+      <div class="grid">
+        <div>
+          <label for="sandbox">Sandbox</label>
+          <select id="sandbox">
+            <option value="read-only">read-only</option>
+            <option value="workspace-write">workspace-write</option>
+          </select>
+        </div>
+        <div>
+          <label for="timeout">Timeout seconds</label>
+          <input id="timeout" type="number" min="10" value="180" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <button onclick="runExec()">Run</button>
+      </div>
+      <pre id="exec">No run yet.</pre>
+    </section>
+  </main>
+
+  <script>
+    const tokenInput = document.getElementById("token");
+    tokenInput.value = localStorage.getItem("codexBridgeToken") || "";
+
+    function saveToken() {
+      localStorage.setItem("codexBridgeToken", tokenInput.value);
+      loadStatus();
+    }
+
+    function token() {
+      return tokenInput.value || localStorage.getItem("codexBridgeToken") || "";
+    }
+
+    async function api(path, options = {}) {
+      const headers = Object.assign({ "X-Codex-Bridge-Token": token() }, options.headers || {});
+      const res = await fetch(path, Object.assign({}, options, { headers }));
+      const text = await res.text();
+      try { return { status: res.status, body: JSON.parse(text) }; }
+      catch { return { status: res.status, body: text }; }
+    }
+
+    function show(id, value) {
+      document.getElementById(id).textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    }
+
+    async function loadStatus() {
+      show("status", await api("/api/status"));
+    }
+
+    async function startLogin() {
+      show("login", await api("/api/login/start", { method: "POST" }));
+      setTimeout(loadLoginStatus, 1000);
+    }
+
+    async function loadLoginStatus() {
+      show("login", await api("/api/login/status"));
+    }
+
+    async function cancelLogin() {
+      show("login", await api("/api/login/cancel", { method: "POST" }));
+    }
+
+    async function logout() {
+      show("status", await api("/api/logout", { method: "POST" }));
+      await loadStatus();
+    }
+
+    async function updateCodex() {
+      show("update", "Updating... this can take a minute.");
+      show("update", await api("/api/update-codex", { method: "POST" }));
+      await loadStatus();
+    }
+
+    async function runExec() {
+      const body = {
+        prompt: document.getElementById("prompt").value,
+        sandbox: document.getElementById("sandbox").value,
+        disableMcp: true,
+        timeoutSeconds: Number(document.getElementById("timeout").value || 180)
+      };
+      show("exec", "Running...");
+      show("exec", await api("/codex/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }));
+    }
+
+    loadStatus();
+  </script>
+</body>
+</html>`;
 }
 
 function readJson(req) {
@@ -103,32 +374,147 @@ function runCodex({ prompt, cwd, sandbox, timeoutMs, disableMcp }) {
 }
 
 const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
   if (req.method === "GET" && req.url === "/") {
     sendJson(res, 200, {
       ok: true,
       service: "codex-n8n-bridge",
       endpoints: {
         health: "GET /health",
+        ui: "GET /ui",
+        status: "GET /api/status",
         exec: "POST /codex/exec",
       },
     });
     return;
   }
 
-  if (req.method === "GET" && req.url === "/health") {
+  if (req.method === "GET" && url.pathname === "/ui") {
+    sendHtml(res, 200, renderUi());
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/health") {
     sendJson(res, 200, { ok: true, service: "codex-n8n-bridge" });
     return;
   }
 
-  if (req.method !== "POST" || req.url !== "/codex/exec") {
+  if (url.pathname === "/api/status" && req.method === "GET") {
+    if (!requireToken(req, res)) return;
+    const login = await runCommand(["login", "status"]);
+    const version = await runCommand(["--version"]);
+    sendJson(res, 200, {
+      ok: true,
+      service: "codex-n8n-bridge",
+      cwd: path.resolve(DEFAULT_CWD),
+      codexBin: CODEX_BIN,
+      disableMcpDefault: DISABLE_MCP,
+      version,
+      login,
+      loginProcess: {
+        running: loginState.running,
+        exitCode: loginState.exitCode,
+        startedAt: loginState.startedAt,
+        finishedAt: loginState.finishedAt,
+      },
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/update-codex" && req.method === "POST") {
+    if (!requireToken(req, res)) return;
+    const before = await runCommand(["--version"]);
+    const update = await runProgram("npm", ["install", "-g", "@openai/codex@latest"]);
+    const after = await runCommand(["--version"]);
+    sendJson(res, update.ok ? 200 : 500, {
+      ok: update.ok,
+      note: "This updates the currently running container only. Rebuild the image for a persistent update.",
+      before,
+      update,
+      after,
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/login/start" && req.method === "POST") {
+    if (!requireToken(req, res)) return;
+    if (loginState.running) {
+      sendJson(res, 409, { ok: false, error: "Login already running", login: loginState });
+      return;
+    }
+
+    loginState = {
+      running: true,
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+    };
+
+    loginProcess = spawn(CODEX_BIN, ["login", "--device-auth"], {
+      cwd: path.resolve(DEFAULT_CWD),
+      windowsHide: true,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+
+    loginProcess.stdout.on("data", (data) => {
+      loginState.stdout += data.toString();
+    });
+    loginProcess.stderr.on("data", (data) => {
+      loginState.stderr += data.toString();
+    });
+    loginProcess.on("error", (error) => {
+      loginState.running = false;
+      loginState.exitCode = null;
+      loginState.stderr += String(error);
+      loginState.finishedAt = new Date().toISOString();
+      loginProcess = null;
+    });
+    loginProcess.on("close", (code) => {
+      loginState.running = false;
+      loginState.exitCode = code;
+      loginState.finishedAt = new Date().toISOString();
+      loginProcess = null;
+    });
+
+    sendJson(res, 202, { ok: true, login: loginState });
+    return;
+  }
+
+  if (url.pathname === "/api/login/status" && req.method === "GET") {
+    if (!requireToken(req, res)) return;
+    sendJson(res, 200, { ok: true, login: loginState });
+    return;
+  }
+
+  if (url.pathname === "/api/login/cancel" && req.method === "POST") {
+    if (!requireToken(req, res)) return;
+    if (loginProcess && loginState.running) {
+      loginProcess.kill("SIGTERM");
+      sendJson(res, 200, { ok: true, message: "Login process cancelled", login: loginState });
+      return;
+    }
+    sendJson(res, 200, { ok: true, message: "No login process running", login: loginState });
+    return;
+  }
+
+  if (url.pathname === "/api/logout" && req.method === "POST") {
+    if (!requireToken(req, res)) return;
+    const result = await runCommand(["logout"]);
+    sendJson(res, result.ok ? 200 : 500, result);
+    return;
+  }
+
+  if (req.method !== "POST" || url.pathname !== "/codex/exec") {
     sendJson(res, 404, { ok: false, error: "Not found" });
     return;
   }
 
-  if (req.headers["x-codex-bridge-token"] !== TOKEN) {
-    sendJson(res, 401, { ok: false, error: "Unauthorized" });
-    return;
-  }
+  if (!requireToken(req, res)) return;
 
   try {
     const body = await readJson(req);

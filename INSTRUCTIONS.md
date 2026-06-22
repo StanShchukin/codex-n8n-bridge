@@ -49,6 +49,12 @@ Health:
 curl.exe http://localhost:8787/health
 ```
 
+Local web panel:
+
+```text
+http://localhost:8787/ui
+```
+
 n8n endpoint:
 
 ```text
@@ -91,11 +97,17 @@ server.js is the Docker bridge.
 server_wsl.py is an alternate WSL bridge.
 docker-compose.container.yml is the primary compose file.
 The root endpoint GET / returns service info.
+GET /ui returns a lightweight local web panel.
 GET /health returns health status.
+GET /api/status returns login and Codex CLI status.
+POST /api/login/start starts codex login --device-auth.
+POST /api/logout logs Codex out of the container volume.
+POST /api/update-codex runs npm install -g @openai/codex@latest inside the running container.
 POST /codex/exec runs codex exec.
 stdin is closed for codex exec to avoid hanging on extra input.
 disableMcp defaults from CODEX_BRIDGE_DISABLE_MCP and can be overridden per request.
 cwd must remain inside CODEX_BRIDGE_CWD.
+Updating Codex CLI through /ui is temporary for the running container; rebuild the image for a durable update.
 ```
 
 Recommended safety:
