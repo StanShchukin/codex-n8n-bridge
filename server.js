@@ -126,6 +126,10 @@ function publicAccounts(state) {
   return Object.values(state.accounts || {}).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function stripAnsi(value) {
+  return String(value || "").replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
+}
+
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload, null, 2);
   res.writeHead(status, {
@@ -175,10 +179,10 @@ function runCommand(args, { timeoutMs = COMMAND_TIMEOUT_MS, accountName } = {}) 
     }, timeoutMs);
 
     child.stdout.on("data", (data) => {
-      stdout += data.toString();
+      stdout += stripAnsi(data.toString());
     });
     child.stderr.on("data", (data) => {
-      stderr += data.toString();
+      stderr += stripAnsi(data.toString());
     });
     child.on("error", (error) => {
       clearTimeout(timer);
@@ -209,10 +213,10 @@ function runProgram(command, args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     }, timeoutMs);
 
     child.stdout.on("data", (data) => {
-      stdout += data.toString();
+      stdout += stripAnsi(data.toString());
     });
     child.stderr.on("data", (data) => {
-      stderr += data.toString();
+      stderr += stripAnsi(data.toString());
     });
     child.on("error", (error) => {
       clearTimeout(timer);
@@ -636,10 +640,10 @@ function runCodex({ prompt, cwd, sandbox, timeoutMs, disableMcp, accountName }) 
     }, timeoutMs || DEFAULT_TIMEOUT_MS);
 
     child.stdout.on("data", (data) => {
-      stdout += data.toString();
+      stdout += stripAnsi(data.toString());
     });
     child.stderr.on("data", (data) => {
-      stderr += data.toString();
+      stderr += stripAnsi(data.toString());
     });
     child.on("error", (error) => {
       clearTimeout(timer);
@@ -878,10 +882,10 @@ const server = http.createServer(async (req, res) => {
     });
 
     loginProcess.stdout.on("data", (data) => {
-      loginState.stdout += data.toString();
+      loginState.stdout += stripAnsi(data.toString());
     });
     loginProcess.stderr.on("data", (data) => {
-      loginState.stderr += data.toString();
+      loginState.stderr += stripAnsi(data.toString());
     });
     loginProcess.on("error", (error) => {
       loginState.running = false;
