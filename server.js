@@ -411,6 +411,24 @@ function renderUi() {
       document.getElementById(id).textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
     }
 
+    function showLogin(value) {
+      const body = value && value.body ? value.body : value;
+      const login = body && body.login ? body.login : {};
+      const output = [login.stdout, login.stderr].filter(Boolean).join("\\n").trim();
+      const lines = [
+        "status: " + (value && value.status !== undefined ? value.status : "local"),
+        "ok: " + Boolean(body && body.ok),
+        "account: " + (login.accountName || activeAccount || ""),
+        "running: " + Boolean(login.running),
+        "exitCode: " + (login.exitCode === null || login.exitCode === undefined ? "" : login.exitCode),
+        "startedAt: " + (login.startedAt || ""),
+        "finishedAt: " + (login.finishedAt || ""),
+        "",
+        output || body.message || body.error || "No login output."
+      ];
+      document.getElementById("login").textContent = lines.join("\\n");
+    }
+
     function escapeHtml(value) {
       return String(value || "").replace(/[&<>"']/g, (ch) => ({
         "&": "&amp;",
@@ -505,7 +523,7 @@ function renderUi() {
     }
 
     async function startLogin(accountName = activeAccount) {
-      show("login", await api("/api/login/start", {
+      showLogin(await api("/api/login/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountName })
@@ -514,11 +532,11 @@ function renderUi() {
     }
 
     async function loadLoginStatus() {
-      show("login", await api("/api/login/status"));
+      showLogin(await api("/api/login/status"));
     }
 
     async function cancelLogin() {
-      show("login", await api("/api/login/cancel", { method: "POST" }));
+      showLogin(await api("/api/login/cancel", { method: "POST" }));
     }
 
     async function logout(accountName = activeAccount) {
