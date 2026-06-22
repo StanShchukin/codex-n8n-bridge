@@ -3,7 +3,8 @@
 ## Build local Docker image
 
 ```powershell
-cd "C:\Users\stanislav.shchukin\Documents\Codex\2026-06-18\hej-co-masz-za-przegl-darke\outputs\codex-n8n-bridge"
+$BRIDGE_DIR = "path\to\codex-n8n-bridge"
+cd $BRIDGE_DIR
 docker build -t codex-n8n-bridge:local .
 ```
 

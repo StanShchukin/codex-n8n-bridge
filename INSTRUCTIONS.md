@@ -34,13 +34,13 @@ Bridge token:          codex-local-test
 Start:
 
 ```powershell
-.\outputs\codex-n8n-bridge\start-container.ps1
+.\start-container.ps1
 ```
 
 Login Codex inside container:
 
 ```powershell
-.\outputs\codex-n8n-bridge\login-container.ps1
+.\login-container.ps1
 ```
 
 Health:

@@ -39,7 +39,7 @@ It runs `codex exec` inside the container and returns `stdout`, `stderr`, and th
 Start the container:
 
 ```powershell
-.\outputs\codex-n8n-bridge\start-container.ps1
+.\start-container.ps1
 ```
 
 The container uses:
@@ -93,7 +93,7 @@ Codex auth is stored in the Docker volume `codex-n8n-bridge`.
 Run:
 
 ```powershell
-.\outputs\codex-n8n-bridge\login-container.ps1
+.\login-container.ps1
 ```
 
 Follow the Codex login flow. After login, verify:
@@ -222,7 +222,7 @@ image: ghcr.io/stanshchukin/codex-n8n-bridge:latest
 To restart:
 
 ```powershell
-docker compose -f .\outputs\codex-n8n-bridge\docker-compose.container.yml up -d
+docker compose -f .\docker-compose.container.yml up -d
 ```
 
 To view logs:
@@ -236,7 +236,8 @@ docker logs codex-n8n-bridge
 Build locally:
 
 ```powershell
-cd "C:\Users\stanislav.shchukin\Documents\Codex\2026-06-18\hej-co-masz-za-przegl-darke\outputs\codex-n8n-bridge"
+$BRIDGE_DIR = "path\to\codex-n8n-bridge"
+cd $BRIDGE_DIR
 docker build -t codex-n8n-bridge:local -t ghcr.io/stanshchukin/codex-n8n-bridge:latest .
 ```
 
@@ -272,7 +273,7 @@ If `/codex/exec` returns auth errors:
 
 ```powershell
 docker exec codex-n8n-bridge codex login status
-.\outputs\codex-n8n-bridge\login-container.ps1
+.\login-container.ps1
 ```
 
 If Codex is slow, raise:

@@ -1,7 +1,15 @@
 $ErrorActionPreference = "Stop"
 
-$workspace = "/mnt/c/Users/stanislav.shchukin/Documents/Codex/2026-06-18/hej-co-masz-za-przegl-darke"
-$codexHome = "/mnt/c/Users/stanislav.shchukin/.codex"
+$bridgeDirWindows = Resolve-Path $PSScriptRoot
+$workspaceWindows = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+$bridgeDir = (wsl.exe -d Ubuntu -- wslpath -a "$bridgeDirWindows").Trim()
+$workspace = (wsl.exe -d Ubuntu -- wslpath -a "$workspaceWindows").Trim()
 $bridgeToken = "codex-local-test"
 
-wsl.exe -d Ubuntu -- bash -lc "cd '$workspace' && export CODEX_HOME='$codexHome' && export CODEX_BRIDGE_TOKEN='$bridgeToken' && export CODEX_BRIDGE_CWD=`$PWD && export CODEX_BRIDGE_DISABLE_MCP=1 && python3 outputs/codex-n8n-bridge/server_wsl.py"
+if ($env:CODEX_HOME_WSL) {
+  $codexHomeExport = "export CODEX_HOME='$($env:CODEX_HOME_WSL)'"
+} else {
+  $codexHomeExport = 'export CODEX_HOME=$HOME/.codex'
+}
+
+wsl.exe -d Ubuntu -- bash -lc "cd '$bridgeDir' && $codexHomeExport && export CODEX_BRIDGE_TOKEN='$bridgeToken' && export CODEX_BRIDGE_CWD='$workspace' && export CODEX_BRIDGE_DISABLE_MCP=1 && python3 server_wsl.py"
