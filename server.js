@@ -52,7 +52,7 @@ function isPathInside(parent, candidate) {
   return candidatePath === parentPath || candidatePath.startsWith(parentPath + path.sep);
 }
 
-function runCodex({ prompt, cwd, sandbox, timeoutMs }) {
+function runCodex({ prompt, cwd, sandbox, timeoutMs, disableMcp }) {
   return new Promise((resolve) => {
     const runCwd = cwd ? path.resolve(cwd) : path.resolve(DEFAULT_CWD);
     if (!isPathInside(DEFAULT_CWD, runCwd)) {
@@ -66,7 +66,7 @@ function runCodex({ prompt, cwd, sandbox, timeoutMs }) {
     }
 
     const args = ["exec"];
-    if (body.disableMcp ?? DISABLE_MCP) {
+    if (disableMcp ?? DISABLE_MCP) {
       args.push("-c", "mcp_servers={}");
     }
     args.push("--sandbox", sandbox || "read-only", "--skip-git-repo-check", prompt);
@@ -135,6 +135,7 @@ const server = http.createServer(async (req, res) => {
       cwd: body.cwd,
       sandbox: body.sandbox,
       timeoutMs: body.timeoutMs,
+      disableMcp: body.disableMcp,
     });
     sendJson(res, result.ok ? 200 : 500, result);
   } catch (error) {
