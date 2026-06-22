@@ -1,235 +1,96 @@
 # Codex n8n Bridge
 
-This small local bridge lets n8n call Codex CLI.
+HTTP bridge that lets n8n call `codex exec` as a local API.
 
-## Current recommended setup
-
-Use the WSL bridge:
+Current published image:
 
 ```text
-n8n Docker -> http://host.docker.internal:8787 -> Ubuntu WSL -> codex exec
+ghcr.io/stanshchukin/codex-n8n-bridge:latest
 ```
 
-This path was tested successfully with n8n running in Docker and Codex CLI running inside Ubuntu WSL.
-
-## WSL bridge
-
-This is usually the nicest local setup if Codex CLI is already installed in Ubuntu WSL.
-
-By default, the bridge uses the current WSL user's Codex auth from:
+Default local URL:
 
 ```text
-~/.codex
+http://localhost:8787
 ```
 
-The WSL bridge also disables MCP servers for `codex exec` by default. This avoids loading Windows-only MCP paths from `/mnt/c/Users/stanislav.shchukin/.codex/config.toml` when the bridge runs in Ubuntu WSL.
-
-If your working Codex auth is stored in another folder, set `CODEX_HOME` when starting the bridge:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/c/Users/stanislav.shchukin/Documents/Codex/2026-06-18/hej-co-masz-za-przegl-darke && export CODEX_HOME=$HOME/.codex && export CODEX_BRIDGE_TOKEN=codex-local-test && export CODEX_BRIDGE_CWD=$PWD && python3 outputs/codex-n8n-bridge/server_wsl.py'
-```
-
-If you use ChatGPT auth from the Windows Codex desktop app, start the WSL bridge with Windows Codex auth:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/c/Users/stanislav.shchukin/Documents/Codex/2026-06-18/hej-co-masz-za-przegl-darke && export CODEX_HOME=/mnt/c/Users/stanislav.shchukin/.codex && export CODEX_BRIDGE_TOKEN=codex-local-test && export CODEX_BRIDGE_CWD=$PWD && export CODEX_BRIDGE_DISABLE_MCP=1 && python3 outputs/codex-n8n-bridge/server_wsl.py'
-```
-
-You can also start the same recommended setup with:
-
-```powershell
-.\outputs\codex-n8n-bridge\start-wsl-bridge.ps1
-```
-
-Check WSL auth directly:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc "codex login status"
-```
-
-Check that the auth really works, not only that a login record exists:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc "cd /mnt/c/Users/stanislav.shchukin/Documents/Codex/2026-06-18/hej-co-masz-za-przegl-darke && CODEX_HOME=/mnt/c/Users/stanislav.shchukin/.codex codex exec -c 'mcp_servers={}' --sandbox read-only --skip-git-repo-check 'Say OK only.'"
-```
-
-### Auth without device code
-
-Option A, keep the key only in the bridge process environment:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/c/Users/stanislav.shchukin/Documents/Codex/2026-06-18/hej-co-masz-za-przegl-darke && export CODEX_BRIDGE_TOKEN=codex-local-test && export CODEX_BRIDGE_CWD=$PWD && export CODEX_API_KEY=your_api_key_here && python3 outputs/codex-n8n-bridge/server_wsl.py'
-```
-
-Option B, persist login inside WSL:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc 'read -s -p "OpenAI API key: " KEY; echo; printf "%s" "$KEY" | codex login --with-api-key'
-```
-
-Option C, if your workspace supports Codex access tokens:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc 'read -s -p "Codex access token: " TOKEN; echo; printf "%s" "$TOKEN" | codex login --with-access-token'
-```
-
-Start from PowerShell:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc 'cd /mnt/c/Users/stanislav.shchukin/Documents/Codex/2026-06-18/hej-co-masz-za-przegl-darke && export CODEX_BRIDGE_TOKEN=codex-local-test && export CODEX_BRIDGE_CWD=$PWD && python3 outputs/codex-n8n-bridge/server_wsl.py'
-```
-
-Leave this terminal open while n8n is using the bridge.
-
-Health check from Windows:
-
-```powershell
-curl.exe http://localhost:8787/health
-```
-
-From n8n Docker use:
+From n8n running in Docker, use:
 
 ```text
-http://host.docker.internal:8787/codex/exec
+http://host.docker.internal:8787
 ```
 
-Headers:
+## What It Does
+
+The bridge exposes a small HTTP API:
 
 ```text
-Content-Type: application/json
-X-Codex-Bridge-Token: codex-local-test
+GET  /              Service info and endpoint list
+GET  /health        Health check
+POST /codex/exec    Runs Codex CLI non-interactively
 ```
 
-Body JSON:
+It runs `codex exec` inside the container and returns `stdout`, `stderr`, and the exit code as JSON.
 
-```json
-{
-  "prompt": "Say briefly whether Codex works with n8n.",
-  "sandbox": "read-only",
-  "disableMcp": true,
-  "timeoutSeconds": 120
-}
-```
+## Quick Start
 
-Expected successful response:
-
-```json
-{
-  "ok": true,
-  "exitCode": 0,
-  "stdout": "OK\n"
-}
-```
-
-## Docker sidecar
-
-This is optional. The WSL bridge above is the currently tested setup.
-
-Copy the example env file:
-
-```powershell
-cd "C:\Users\stanislav.shchukin\Documents\Codex\2026-06-18\hej-co-masz-za-przegl-darke\outputs\codex-n8n-bridge"
-copy .env.example .env
-```
-
-Edit `.env` and set:
-
-```text
-CODEX_BRIDGE_TOKEN=your-local-token
-CODEX_API_KEY=your-openai-or-codex-api-key
-```
-
-Build and start:
-
-```powershell
-docker compose up -d --build
-```
-
-If this compose file is not merged into the same compose project as n8n, call it from n8n with:
-
-```text
-http://host.docker.internal:8787/codex/exec
-```
-
-If you put `codex-bridge` in the same Docker Compose network as n8n, call it with:
-
-```text
-http://codex-bridge:8787/codex/exec
-```
-
-## Docker container
-
-Use this when you want the bridge to run as a normal Docker service. It stores Codex auth in a Docker volume named `codex-n8n-bridge`, not in your Windows or WSL Codex auth.
-
-Login Codex inside the container:
-
-```powershell
-.\outputs\codex-n8n-bridge\login-container.ps1
-```
-
-Start the bridge:
+Start the container:
 
 ```powershell
 .\outputs\codex-n8n-bridge\start-container.ps1
 ```
 
-The bridge is exposed on Windows port `8787`.
+The container uses:
+
+```text
+container: codex-n8n-bridge
+port:      8787:8787
+volume:    codex-n8n-bridge:/root/.codex
+```
 
 Health check:
 
 ```powershell
+curl.exe http://localhost:8787/
 curl.exe http://localhost:8787/health
 ```
 
-From n8n Docker use:
-
-```text
-http://host.docker.internal:8787/codex/exec
-```
-
-Headers:
-
-```text
-Content-Type: application/json
-X-Codex-Bridge-Token: codex-local-test
-```
-
-Body JSON:
+Expected `/` response:
 
 ```json
 {
-  "prompt": "Say OK only.",
-  "sandbox": "read-only",
-  "disableMcp": true,
-  "timeoutSeconds": 180
+  "ok": true,
+  "service": "codex-n8n-bridge",
+  "endpoints": {
+    "health": "GET /health",
+    "exec": "POST /codex/exec"
+  }
 }
 ```
 
-## Start on Windows PowerShell
+## Login
 
-This is optional. Use it only if you want to run the bridge directly on Windows instead of WSL.
+Codex auth is stored in the Docker volume `codex-n8n-bridge`.
 
-```powershell
-cd "C:\Users\stanislav.shchukin\Documents\Codex\2026-06-18\hej-co-masz-za-przegl-darke\outputs\codex-n8n-bridge"
-$env:CODEX_BRIDGE_TOKEN = "change-me-local-token"
-$env:CODEX_BRIDGE_CWD = "C:\Users\stanislav.shchukin\Documents\Codex\2026-06-18\hej-co-masz-za-przegl-darke"
-node .\server.js
-```
-
-Health check from Windows:
+Run:
 
 ```powershell
-curl.exe http://localhost:8787/health
+.\outputs\codex-n8n-bridge\login-container.ps1
 ```
 
-Health check from n8n Docker:
+Follow the Codex login flow. After login, verify:
+
+```powershell
+docker exec codex-n8n-bridge codex login status
+```
+
+Expected:
 
 ```text
-http://host.docker.internal:8787/health
+Logged in using ChatGPT
 ```
 
-## n8n HTTP Request node
+## n8n HTTP Request Node
 
 Method:
 
@@ -254,38 +115,146 @@ Body JSON:
 
 ```json
 {
-  "prompt": "Summarize this repository in 5 bullets.",
+  "prompt": "Say OK only.",
   "sandbox": "read-only",
   "disableMcp": true,
-  "timeoutSeconds": 120
+  "timeoutSeconds": 180
 }
 ```
 
-For edit-capable Codex runs, use:
+Expected successful response:
 
 ```json
 {
-  "prompt": "Create a small README improvement and explain the change.",
-  "sandbox": "workspace-write",
+  "ok": true,
+  "exitCode": 0,
+  "stdout": "OK\n",
+  "stderr": "..."
+}
+```
+
+## Request Body
+
+`prompt` is required.
+
+```json
+{
+  "prompt": "Your Codex task",
+  "sandbox": "read-only",
   "disableMcp": true,
+  "timeoutSeconds": 180,
+  "cwd": "/workspace"
+}
+```
+
+Fields:
+
+```text
+prompt          Required. Prompt passed to codex exec.
+sandbox         Optional. Defaults to read-only. Use workspace-write for edits.
+disableMcp      Optional. Defaults from CODEX_BRIDGE_DISABLE_MCP.
+timeoutSeconds  Optional. Request timeout for codex exec.
+cwd             Optional. Must stay inside CODEX_BRIDGE_CWD.
+```
+
+## Security Notes
+
+Set a real bridge token before using this beyond local experiments:
+
+```yaml
+CODEX_BRIDGE_TOKEN: your-secret-token
+```
+
+Do not expose this service to the public internet. It can run Codex tasks against the mounted workspace.
+
+Use `read-only` sandbox for normal n8n calls. Use `workspace-write` only when the workflow should allow file edits inside `/workspace`.
+
+## Docker Compose
+
+Main compose file:
+
+```text
+docker-compose.container.yml
+```
+
+It uses the published GHCR image:
+
+```yaml
+image: ghcr.io/stanshchukin/codex-n8n-bridge:latest
+```
+
+To restart:
+
+```powershell
+docker compose -f .\outputs\codex-n8n-bridge\docker-compose.container.yml up -d
+```
+
+To view logs:
+
+```powershell
+docker logs codex-n8n-bridge
+```
+
+## Build And Publish
+
+Build locally:
+
+```powershell
+cd "C:\Users\stanislav.shchukin\Documents\Codex\2026-06-18\hej-co-masz-za-przegl-darke\outputs\codex-n8n-bridge"
+docker build -t codex-n8n-bridge:local -t ghcr.io/stanshchukin/codex-n8n-bridge:latest .
+```
+
+Push image:
+
+```powershell
+docker push ghcr.io/stanshchukin/codex-n8n-bridge:latest
+```
+
+GitHub repo:
+
+```text
+https://github.com/StanShchukin/codex-n8n-bridge
+```
+
+## Troubleshooting
+
+If `/health` does not respond:
+
+```powershell
+docker ps --filter name=codex-n8n-bridge
+docker logs codex-n8n-bridge
+```
+
+If n8n cannot connect:
+
+```text
+Use http://host.docker.internal:8787 from n8n Docker.
+Use http://localhost:8787 from Windows.
+```
+
+If `/codex/exec` returns auth errors:
+
+```powershell
+docker exec codex-n8n-bridge codex login status
+.\outputs\codex-n8n-bridge\login-container.ps1
+```
+
+If Codex is slow, raise:
+
+```json
+{
   "timeoutSeconds": 300
 }
 ```
 
-The bridge only allows `cwd` values inside `CODEX_BRIDGE_CWD`.
+If MCP startup causes problems, keep:
 
-## Troubleshooting
-
-If `/health` does not respond, the bridge is not running. Start the WSL bridge again with the PowerShell command above.
-
-If `/codex/exec` returns an auth error, check Codex login inside WSL:
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc "codex login status"
+```json
+{
+  "disableMcp": true
+}
 ```
 
-If n8n cannot connect but Windows can, keep using this URL from inside n8n Docker:
+## Alternative WSL Mode
 
-```text
-http://host.docker.internal:8787/codex/exec
-```
+The repository also contains `server_wsl.py` and `start-wsl-bridge.ps1` for running the bridge in Ubuntu WSL instead of Docker. The Docker container setup above is the current recommended API setup for n8n.
