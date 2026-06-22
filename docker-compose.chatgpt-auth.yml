@@ -1,0 +1,22 @@
+services:
+  codex-bridge-test:
+    build:
+      context: .
+    container_name: codex-bridge-test
+    restart: unless-stopped
+    environment:
+      CODEX_BRIDGE_TOKEN: codex-test-token
+      CODEX_BRIDGE_CWD: /workspace
+      CODEX_BRIDGE_HOST: 0.0.0.0
+      CODEX_BRIDGE_PORT: 8787
+      CODEX_BRIDGE_TIMEOUT_MS: 600000
+      CODEX_BRIDGE_DISABLE_MCP: "1"
+    ports:
+      - "8788:8787"
+    volumes:
+      - ../../:/workspace
+      - codex-test-home:/root/.codex
+    working_dir: /workspace
+
+volumes:
+  codex-test-home:

@@ -1,0 +1,13 @@
+services:
+  codex-bridge:
+    build:
+      context: .
+    container_name: codex-bridge
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8787:8787"
+    volumes:
+      - ../../:/workspace
+    working_dir: /workspace
