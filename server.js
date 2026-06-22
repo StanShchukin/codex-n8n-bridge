@@ -126,6 +126,7 @@ function runProgram(command, args, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
 }
 
 function renderUi() {
+  const localTokenHint = TOKEN === "codex-local-test" ? TOKEN : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -148,6 +149,7 @@ function renderUi() {
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     .pill { display: inline-flex; align-items: center; border: 1px solid #444; border-radius: 999px; padding: 4px 9px; font-size: 12px; color: #ddd; }
+    .notice { border-color: #61502a; background: #1f1a10; color: #f2dca2; }
     pre { overflow: auto; background: #0b0b0b; border: 1px solid #2b2b2b; border-radius: 6px; padding: 12px; white-space: pre-wrap; word-break: break-word; }
     .muted { color: #aaa; }
     @media (max-width: 760px) { body { padding: 14px; } .grid { grid-template-columns: 1fr; } }
@@ -166,9 +168,11 @@ function renderUi() {
       <input id="token" type="password" placeholder="X-Codex-Bridge-Token" />
       <div class="row" style="margin-top: 10px;">
         <button onclick="saveToken()">Save token</button>
+        ${localTokenHint ? '<button onclick="useLocalToken()">Use local test token</button>' : ''}
         <button onclick="loadStatus()">Refresh status</button>
         <button onclick="logout()">Logout Codex</button>
       </div>
+      <p id="tokenHint" class="muted">API calls need the same token as <code>X-Codex-Bridge-Token</code>.</p>
     </section>
 
     <div class="grid">
@@ -224,6 +228,7 @@ function renderUi() {
 
   <script>
     const tokenInput = document.getElementById("token");
+    const localTokenHint = ${JSON.stringify(localTokenHint)};
     tokenInput.value = localStorage.getItem("codexBridgeToken") || "";
 
     function saveToken() {
@@ -231,16 +236,46 @@ function renderUi() {
       loadStatus();
     }
 
+    function useLocalToken() {
+      tokenInput.value = localTokenHint;
+      saveToken();
+    }
+
     function token() {
       return tokenInput.value || localStorage.getItem("codexBridgeToken") || "";
     }
 
     async function api(path, options = {}) {
+      if (!token()) {
+        return {
+          status: 0,
+          body: {
+            ok: false,
+            error: "Missing bridge token",
+            hint: localTokenHint
+              ? "Click Use local test token or enter codex-local-test."
+              : "Enter the bridge token and click Save token."
+          }
+        };
+      }
       const headers = Object.assign({ "X-Codex-Bridge-Token": token() }, options.headers || {});
       const res = await fetch(path, Object.assign({}, options, { headers }));
       const text = await res.text();
-      try { return { status: res.status, body: JSON.parse(text) }; }
-      catch { return { status: res.status, body: text }; }
+      let body;
+      try { body = JSON.parse(text); }
+      catch { body = text; }
+      if (res.status === 401) {
+        return {
+          status: res.status,
+          body: {
+            ok: false,
+            error: "Unauthorized",
+            hint: "Bridge token is missing or incorrect. Save the current token and try again.",
+            response: body
+          }
+        };
+      }
+      return { status: res.status, body };
     }
 
     function show(id, value) {
@@ -290,7 +325,17 @@ function renderUi() {
       }));
     }
 
-    loadStatus();
+    if (token()) {
+      loadStatus();
+    } else {
+      show("status", {
+        ok: false,
+        error: "Missing bridge token",
+        hint: localTokenHint
+          ? "Click Use local test token."
+          : "Enter the bridge token and click Save token."
+      });
+    }
   </script>
 </body>
 </html>`;
