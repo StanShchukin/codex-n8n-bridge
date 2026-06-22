@@ -41,6 +41,7 @@ function sendHtml(res, status, body) {
   res.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "content-length": Buffer.byteLength(body),
+    "cache-control": "no-store",
   });
   res.end(body);
 }
@@ -229,7 +230,7 @@ function renderUi() {
   <script>
     const tokenInput = document.getElementById("token");
     const localTokenHint = ${JSON.stringify(localTokenHint)};
-    tokenInput.value = localStorage.getItem("codexBridgeToken") || "";
+    tokenInput.value = localStorage.getItem("codexBridgeToken") || localTokenHint || "";
 
     function saveToken() {
       localStorage.setItem("codexBridgeToken", tokenInput.value);
