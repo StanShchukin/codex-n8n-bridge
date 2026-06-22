@@ -28,6 +28,7 @@ The bridge exposes a small HTTP API:
 GET  /              Service info and endpoint list
 GET  /ui            Lightweight local web panel
 GET  /health        Health check
+GET  /api/accounts  Account list and active account
 GET  /api/status    Bridge, login, and Codex CLI status
 POST /codex/exec    Runs Codex CLI non-interactively
 ```
@@ -80,10 +81,62 @@ The panel can:
 
 ```text
 show bridge and Codex login status
-start Codex device login
-logout Codex from the container volume
+create and switch Codex accounts
+start Codex device login for the active account
+logout Codex from an account profile
 run a test codex exec prompt
 temporarily update Codex CLI inside the running container
+```
+
+## Multi-Account Mode
+
+The bridge supports multiple Codex auth profiles in the same Docker volume.
+
+```text
+metadata: /root/.codex/bridge-accounts.json
+profiles: /root/.codex/accounts/<accountName>/
+```
+
+Account names may use only letters, numbers, dash, and underscore. Examples:
+
+```text
+default
+main
+test
+client-a
+```
+
+Use the `/ui` panel to:
+
+```text
+create an account
+add a manual limit note
+select the active account
+start device login for that account
+logout from that account
+delete unused accounts
+```
+
+The active account is used by default for n8n requests. You can also select an account per API call:
+
+```json
+{
+  "prompt": "Say OK only.",
+  "accountName": "main",
+  "sandbox": "read-only",
+  "disableMcp": true,
+  "timeoutSeconds": 180
+}
+```
+
+Account API:
+
+```text
+GET  /api/accounts
+POST /api/accounts/create
+POST /api/accounts/select
+POST /api/accounts/delete
+POST /api/accounts/note
 ```
 
 ## Login
@@ -152,6 +205,7 @@ Body JSON:
 ```json
 {
   "prompt": "Say OK only.",
+  "accountName": "default",
   "sandbox": "read-only",
   "disableMcp": true,
   "timeoutSeconds": 180
@@ -176,6 +230,7 @@ Expected successful response:
 ```json
 {
   "prompt": "Your Codex task",
+  "accountName": "default",
   "sandbox": "read-only",
   "disableMcp": true,
   "timeoutSeconds": 180,
@@ -187,6 +242,7 @@ Fields:
 
 ```text
 prompt          Required. Prompt passed to codex exec.
+accountName     Optional. Uses the active UI account when omitted.
 sandbox         Optional. Defaults to read-only. Use workspace-write for edits.
 disableMcp      Optional. Defaults from CODEX_BRIDGE_DISABLE_MCP.
 timeoutSeconds  Optional. Request timeout for codex exec.

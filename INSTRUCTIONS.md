@@ -73,6 +73,7 @@ n8n body:
 ```json
 {
   "prompt": "Say OK only.",
+  "accountName": "default",
   "sandbox": "read-only",
   "disableMcp": true,
   "timeoutSeconds": 180
@@ -99,14 +100,21 @@ docker-compose.container.yml is the primary compose file.
 The root endpoint GET / returns service info.
 GET /ui returns a lightweight local web panel.
 GET /health returns health status.
+GET /api/accounts lists accounts and the active account.
+POST /api/accounts/create creates a Codex account profile.
+POST /api/accounts/select switches the active profile when no login/exec is running.
+POST /api/accounts/delete deletes an unused account profile.
+POST /api/accounts/note saves a manual limit note.
 GET /api/status returns login and Codex CLI status.
-POST /api/login/start starts codex login --device-auth.
-POST /api/logout logs Codex out of the container volume.
+POST /api/login/start starts codex login --device-auth for the active or requested account.
+POST /api/logout logs Codex out of the active or requested account.
 POST /api/update-codex runs npm install -g @openai/codex@latest inside the running container.
 POST /codex/exec runs codex exec.
 stdin is closed for codex exec to avoid hanging on extra input.
 disableMcp defaults from CODEX_BRIDGE_DISABLE_MCP and can be overridden per request.
 cwd must remain inside CODEX_BRIDGE_CWD.
+Codex accounts live under /root/.codex/accounts/<accountName>/ and metadata lives in /root/.codex/bridge-accounts.json.
+When accountName is omitted, /codex/exec uses the active account selected in /ui.
 Updating Codex CLI through /ui is temporary for the running container; rebuild the image for a durable update.
 ```
 
