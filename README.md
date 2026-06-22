@@ -158,41 +158,41 @@ If you put `codex-bridge` in the same Docker Compose network as n8n, call it wit
 http://codex-bridge:8787/codex/exec
 ```
 
-## Docker test account
+## Docker container
 
-Use this when you want a completely separate Codex login for tests. It stores auth in a Docker volume named `codex-test-home`, not in your Windows or WSL Codex auth.
+Use this when you want the bridge to run as a normal Docker service. It stores Codex auth in a Docker volume named `codex-n8n-bridge`, not in your Windows or WSL Codex auth.
 
-Login with a separate ChatGPT account:
-
-```powershell
-.\outputs\codex-n8n-bridge\login-test-container.ps1
-```
-
-Start the isolated bridge:
+Login Codex inside the container:
 
 ```powershell
-.\outputs\codex-n8n-bridge\start-test-container.ps1
+.\outputs\codex-n8n-bridge\login-container.ps1
 ```
 
-The test bridge is exposed on Windows port `8788`.
+Start the bridge:
+
+```powershell
+.\outputs\codex-n8n-bridge\start-container.ps1
+```
+
+The bridge is exposed on Windows port `8787`.
 
 Health check:
 
 ```powershell
-curl.exe http://localhost:8788/health
+curl.exe http://localhost:8787/health
 ```
 
 From n8n Docker use:
 
 ```text
-http://host.docker.internal:8788/codex/exec
+http://host.docker.internal:8787/codex/exec
 ```
 
 Headers:
 
 ```text
 Content-Type: application/json
-X-Codex-Bridge-Token: codex-test-token
+X-Codex-Bridge-Token: codex-local-test
 ```
 
 Body JSON:

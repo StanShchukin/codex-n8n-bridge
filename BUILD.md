@@ -10,12 +10,12 @@ docker build -t codex-n8n-bridge:local .
 ## Run local image
 
 ```powershell
-docker run --rm -p 8788:8787 `
-  -e CODEX_BRIDGE_TOKEN=codex-test-token `
+docker run --rm -p 8787:8787 `
+  -e CODEX_BRIDGE_TOKEN=codex-local-test `
   -e CODEX_BRIDGE_CWD=/workspace `
   -e CODEX_BRIDGE_DISABLE_MCP=1 `
   -v "${PWD}\..\..:/workspace" `
-  -v codex-test-home:/root/.codex `
+  -v codex-n8n-bridge:/root/.codex `
   codex-n8n-bridge:local
 ```
 

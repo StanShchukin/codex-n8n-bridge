@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 Push-Location "$PSScriptRoot"
 try {
-  docker compose -f docker-compose.chatgpt-auth.yml up -d --build
+  docker compose -f docker-compose.container.yml up -d
 } finally {
   Pop-Location
 }
