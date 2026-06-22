@@ -103,6 +103,18 @@ function runCodex({ prompt, cwd, sandbox, timeoutMs, disableMcp }) {
 }
 
 const server = http.createServer(async (req, res) => {
+  if (req.method === "GET" && req.url === "/") {
+    sendJson(res, 200, {
+      ok: true,
+      service: "codex-n8n-bridge",
+      endpoints: {
+        health: "GET /health",
+        exec: "POST /codex/exec",
+      },
+    });
+    return;
+  }
+
   if (req.method === "GET" && req.url === "/health") {
     sendJson(res, 200, { ok: true, service: "codex-n8n-bridge" });
     return;
